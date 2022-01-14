@@ -1,0 +1,24 @@
+version: '3'
+services:
+    neo4j:
+        image: neo4j:latest
+        env_file:
+          - .env
+        ports:
+          - '7474:7474'
+          - '7687:7687'
+        environment:
+            NEO4J_AUTH: neo4j/test
+        # volumes:
+        #     - .:/code
+        #     - ./neo4j/certificates:/certificates/bolt
+        #     - ./neo4j/data:/data
+        #     - ./neo4j/logs:/logs
+        #     - ./neo4j/import:/var/lib/neo4j/import
+        #     - ./neo4j/plugins:/plugins          
+        #     - ./neo4j/conf:/var/lib/neo4j/conf
+        networks:
+            - backend
+
+networks:
+  backend: 
