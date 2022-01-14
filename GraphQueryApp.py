@@ -132,24 +132,28 @@ def graph_doc_matching(query_embedding,local):
     
     score_list = []
     id_list = []
-    for key in full_doc_emb.keys():
-        sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),full_doc_emb[key].cuda().view(1,-1)).item()
-        score_list.append(sim_score)
-        id_list.append(key)
-    # for cluster in cluster_dict.keys():
-    #     if cluster!=str(-1):
-    #         cluster_centroid = torch.Tensor(cluster_dict[cluster]['centroid'])
-    #         sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),cluster_centroid.cuda().view(1,-1)).item()
-    #         if sim_score>=max_cluster_score:
-    #             cluster_number = str(cluster)
-    #             max_cluster_score = sim_score
-    #     else:
-    #         continue
+    
+    use_cluster=True
+    if use_cluster:
+        for cluster in cluster_dict.keys():
+            if cluster!=str(-1):
+                cluster_centroid = torch.Tensor(cluster_dict[cluster]['centroid'])
+                sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),cluster_centroid.cuda().view(1,-1)).item()
+                if sim_score>=max_cluster_score:
+                    cluster_number = str(cluster)
+                    max_cluster_score = sim_score
+            else:
+                continue        
+    else:
+        for key in full_doc_emb.keys():
+            sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),full_doc_emb[key].cuda().view(1,-1)).item()
+            score_list.append(sim_score)
+            id_list.append(key)
 
-    # for doc_id in cluster_dict[cluster_number]['id_list']:
-    #     sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),full_doc_emb[doc_id].cuda().view(1,-1)).item()
-    #     score_list.append(sim_score)
-    #     id_list.append(doc_id)
+    for doc_id in cluster_dict[cluster_number]['id_list']:
+        sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),full_doc_emb[doc_id].cuda().view(1,-1)).item()
+        score_list.append(sim_score)
+        id_list.append(doc_id)
     
     cluster_df = pd.DataFrame()
     cluster_df['id'] = id_list
@@ -177,4 +181,10 @@ st.write(st.session_state.document)
 if st.button("query"):
     query_embedding = get_doc_embedding(local=True)
     output_table = graph_doc_matching(query_embedding,local=True)
-    st.table(output_table)
+    url_ids = output_table["id"]
+    dataset_obj = Dataset.get(dataset_project = "datasets/gdelt", dataset_name="raw_gdelt_2021")
+    url2id = pd.read_csv(os.path.join(dataset_obj.get_local_copy(), "url2id.txt")).loc[1:,:]
+    output_table["id"] = output_table["id"].astype("int32")
+    urls = output_table.merge(url2id, how="left", on="id").rename(columns={"value": "top 5 URLs"})#.tolist()
+    st.table(urls)
+
