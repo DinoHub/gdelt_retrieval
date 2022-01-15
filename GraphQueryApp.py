@@ -4,6 +4,7 @@ import os
 import pandas as pd
 from clearml import Task, StorageManager, Dataset
 import json, pickle
+from streamlit_agraph import agraph, TripleStore, Node, Edge, Config
 
 st.set_page_config(layout="wide")
 st.title("Graph Retrieval Demo")
@@ -16,6 +17,8 @@ if "tgt" not in st.session_state.keys():
     st.session_state.tgt = []
 if "document" not in st.session_state.keys():
     st.session_state.document = []
+if "graph" not in st.session_state.keys():
+    st.session_state.graph = TripleStore()
 
 
 def set_source():
@@ -86,7 +89,8 @@ def get_entity_embedding(id_list, embedding_matrix):
     for i in id_list:
         output_list.append(embedding_matrix[i])
     if output_list==[]:
-        return torch.zeros(1,200).cuda()
+        # return torch.zeros(1,200).cuda()
+        return None
     else:
         output_tensor = torch.stack(output_list)
         return output_tensor
@@ -97,7 +101,8 @@ def get_relation_embedding(id_list, embedding_matrix):
     for i in id_list:
         output_list.append(embedding_matrix[i])
     if output_list==[]:
-        return torch.zeros(1,200).cuda()
+        # return torch.zeros(1,200).cuda()
+        return None
     else:
         output_tensor = torch.stack(output_list)
         return output_tensor
@@ -115,15 +120,25 @@ def get_doc_embedding(local):
     rel_id = get_relation_id(rel,"evt2id.txt",local=local)
     tgt_id = get_entity_id(tgt,"ent2id.txt",local=local)
 
-    src_embedding = get_entity_embedding(src_id, transe["ent_embeddings.weight"]).mean(dim=0)
-    rel_embedding = get_relation_embedding(rel_id, transe["rel_embeddings.weight"]).mean(dim=0)
-    tgt_embedding = get_entity_embedding(tgt_id, transe["ent_embeddings.weight"]).mean(dim=0)
+    src_embedding = get_entity_embedding(src_id, transe["ent_embeddings.weight"])
+    rel_embedding = get_relation_embedding(rel_id, transe["rel_embeddings.weight"])
+    tgt_embedding = get_entity_embedding(tgt_id, transe["ent_embeddings.weight"])
 
-    doc_embedding = torch.cat((src_embedding.unsqueeze(0), rel_embedding.unsqueeze(0), tgt_embedding.unsqueeze(0)), dim=1)
-    return doc_embedding
+    emb_list = []
+    type_list = []
+    for i,emb in enumerate([src_embedding,rel_embedding,tgt_embedding]):
+        if emb==None:
+            continue
+        else:
+            emb_list.append(emb.mean(dim=0).unsqueeze(0))
+            type_list.append(i)
+
+    # doc_embedding = torch.cat((src_embedding.unsqueeze(0), rel_embedding.unsqueeze(0), tgt_embedding.unsqueeze(0)), dim=1)
+    doc_embedding = torch.cat(emb_list, dim=1)
+    return doc_embedding, type_list
 
 #to do
-def graph_doc_matching(query_embedding,local):
+def graph_doc_matching(query_embedding,type_list,use_cluster,local):
     
     cluster_dict = get_cluster("cluster_data.json",local)
     full_doc_emb = get_doc("temporal_list_by_idx.pkl",local)
@@ -133,27 +148,37 @@ def graph_doc_matching(query_embedding,local):
     score_list = []
     id_list = []
     
-    use_cluster=True
     if use_cluster:
         for cluster in cluster_dict.keys():
             if cluster!=str(-1):
                 cluster_centroid = torch.Tensor(cluster_dict[cluster]['centroid'])
+                centroid_embedding = torch.split(cluster_centroid,200,0)
+                emb_list = []
+                for index in type_list:
+                    emb_list.append(centroid_embedding[index].unsqueeze(0))
+                centroid_embedding = torch.cat(emb_list,dim=1)
                 sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),cluster_centroid.cuda().view(1,-1)).item()
                 if sim_score>=max_cluster_score:
                     cluster_number = str(cluster)
                     max_cluster_score = sim_score
             else:
-                continue        
+                continue    
+
+        for doc_id in cluster_dict[cluster_number]['id_list']:
+            sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),full_doc_emb[doc_id].cuda().view(1,-1)).item()
+            score_list.append(sim_score)
+            id_list.append(doc_id)    
     else:
         for key in full_doc_emb.keys():
-            sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),full_doc_emb[key].cuda().view(1,-1)).item()
+            doc_embedding = full_doc_emb[key]
+            doc_embedding = torch.split(doc_embedding,200,0)
+            emb_list = []
+            for index in type_list:
+                emb_list.append(doc_embedding[index].unsqueeze(0))
+            doc_embedding = torch.cat(emb_list,dim=1)
+            sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),doc_embedding[key].cuda().view(1,-1)).item()
             score_list.append(sim_score)
             id_list.append(key)
-
-    for doc_id in cluster_dict[cluster_number]['id_list']:
-        sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),full_doc_emb[doc_id].cuda().view(1,-1)).item()
-        score_list.append(sim_score)
-        id_list.append(doc_id)
     
     cluster_df = pd.DataFrame()
     cluster_df['id'] = id_list
@@ -167,24 +192,51 @@ def set_query():
     rel = st.text_input("insert relation here", key="relation", value="", on_change=set_relation)
     tgt = st.text_input("insert target entity here", key="target", value="", on_change=set_target)
     if st.button("submit"):
+        if st.session_state.src==[]:
+            if st.session_state.tgt==[]:
+                if st.session_state.rel==[]:
+                    st.session_state.graph.add_triple("Unknown", "Unknown", "Unknown")
+                else:
+                    st.session_state.graph.add_triple("Unknown", st.session_state.rel, "Unknown")
+            else:
+                if st.session_state.rel==[]:
+                    st.session_state.graph.add_triple("Unknown", "Unknown", st.session_state.tgt)
+                else:
+                    st.session_state.graph.add_triple("Unknown", st.session_state.rel, st.session_state.tgt)
+        else:
+            if st.session_state.tgt==[]:
+                if st.session_state.rel==[]:
+                    st.session_state.graph.add_triple(st.session_state.src, "Unknown", "Unknown")
+                else:
+                    st.session_state.graph.add_triple(st.session_state.src, st.session_state.rel, "Unknown")
+            else:
+                if st.session_state.rel==[]:
+                    st.session_state.graph.add_triple(st.session_state.src, "Unknown", st.session_state.tgt)
+                else:
+                    st.session_state.graph.add_triple(st.session_state.src, st.session_state.rel, st.session_state.tgt)
         st.session_state.document.append([st.session_state.src, st.session_state.rel, st.session_state.tgt])
-    # if st.button("calculate"):
-    #     query_embedding = get_doc_embedding()
-    #     output_table = graph_doc_matching(query_embedding)
-    #     st.table(output_table)
 
 #st.session_state.document=[]
 set_query()
-st.subheader("Registered Query")
 #st.write([st.session_state.src, st.session_state.rel, st.session_state.tgt])
-st.write(st.session_state.document)
+# st.write(st.session_state.document)
 if st.button("query"):
-    query_embedding = get_doc_embedding(local=True)
-    output_table = graph_doc_matching(query_embedding,local=True)
+    query_embedding,type_list = get_doc_embedding(local=True)
+    output_table = graph_doc_matching(query_embedding,type_list,use_cluster=True,local=True)
     url_ids = output_table["id"]
     dataset_obj = Dataset.get(dataset_project = "datasets/gdelt", dataset_name="raw_gdelt_2021")
     url2id = pd.read_csv(os.path.join(dataset_obj.get_local_copy(), "url2id.txt")).loc[1:,:]
     output_table["id"] = output_table["id"].astype("int32")
     urls = output_table.merge(url2id, how="left", on="id").rename(columns={"value": "top 5 URLs"})#.tolist()
     st.table(urls)
+st.subheader("Registered Query")
+config = Config(height=500,width=700, 
+                nodeHighlightBehavior=True,
+                highlightColor="#F7A7A6", 
+                directed=True, 
+                collapsible=False,
+                node={'labelProperty':'label'},
+                link={'labelProperty': 'label', 'renderLabel': True})
+agraph(list(st.session_state.graph.getNodes()), list(st.session_state.graph.getEdges()), config)
+
 
