@@ -31,17 +31,17 @@ def set_relation():
     st.session_state.rel = st.session_state.relation
 
 #to do
-def get_transe(path:str,local=True):
-    if local:
+def get_transe(path:str,use_local=True):
+    if use_local:
         transe_path = os.path.join("data",path)
     else:
-        transe_path = os.path.join(Dataset.get(dataset_project="shasha/IE-Demo",dataset_name=path).get_local_copy(),path)
+        transe_path = os.path.join(Dataset.get(dataset_project="shasha/IE-Demo",dataset_name=path).get_use_local_copy(),path)
     er_emb = torch.load(transe_path)
     return er_emb
 
 #to do
-def get_cluster(path:str,local=True):
-    if local:
+def get_cluster(path:str,use_local=True):
+    if use_local:
         cluster_path = os.path.join("data",path)
     else:
         cluster_path = os.path.join(Dataset.get(dataset_project="shasha/IE-Demo",dataset_name=path).get_local_copy(),path)
@@ -50,8 +50,8 @@ def get_cluster(path:str,local=True):
     return cluster_dict
 
 #to do
-def get_doc(path:str,local=True):
-    if local:
+def get_doc(path:str,use_local=True):
+    if use_local:
         doc_path = os.path.join("data",path)
     else:
         doc_path = os.path.join(Dataset.get(dataset_project="shasha/IE-Demo",dataset_name=path).get_local_copy(),path)
@@ -60,9 +60,8 @@ def get_doc(path:str,local=True):
     output = {k: v for d in doc_emb for k, v in d.items()}
     return output
 
-#to do
-def get_entity_id(entity_text_list,path,local=True):
-    if local:
+def get_entity_id(entity_text_list:list, path:str, use_local=True)->list:
+    if use_local:
         ent2id_path = os.path.join("data",path)
     else:
         ent2id_path = os.path.join(Dataset.get(dataset_project="shasha/IE-Demo",dataset_name=path).get_local_copy(),path)
@@ -71,8 +70,8 @@ def get_entity_id(entity_text_list,path,local=True):
     return ent_id
 
 #to do
-def get_relation_id(relation_text_list,path,local=True):
-    if local:
+def get_relation_id(relation_text_list:list, path:str, use_local=True):
+    if use_local:
         evt2id_path = os.path.join("data",path)
     else:
         evt2id_path = os.path.join(Dataset.get(dataset_project="shasha/IE-Demo",dataset_name=path).get_local_copy(),path)
@@ -81,7 +80,7 @@ def get_relation_id(relation_text_list,path,local=True):
     return evt_id
 
 #to do
-def get_entity_embedding(id_list, embedding_matrix):
+def get_entity_embedding(id_list:list, embedding_matrix):
     output_list = []
     for i in id_list:
         output_list.append(embedding_matrix[i])
@@ -92,7 +91,7 @@ def get_entity_embedding(id_list, embedding_matrix):
         return output_tensor
 
 #to do
-def get_relation_embedding(id_list, embedding_matrix):
+def get_relation_embedding(id_list:list, embedding_matrix):
     output_list = []
     for i in id_list:
         output_list.append(embedding_matrix[i])
@@ -103,7 +102,7 @@ def get_relation_embedding(id_list, embedding_matrix):
         return output_tensor
 
 #to do
-def get_doc_embedding(local):
+def get_doc_embedding(use_local):
     document_query=st.session_state.document
     print(document_query)
     transe=get_transe("transe.ckpt",local=local)
@@ -111,9 +110,9 @@ def get_doc_embedding(local):
     rel=[triple[1] for triple in document_query if triple[1]!=[]]
     tgt=[triple[2] for triple in document_query if triple[2]!=[]]
 
-    src_id = get_entity_id(src,"ent2id.txt",local=local)
-    rel_id = get_relation_id(rel,"evt2id.txt",local=local)
-    tgt_id = get_entity_id(tgt,"ent2id.txt",local=local)
+    src_id = get_entity_id(src,"ent2id.txt",use_local=use_local)
+    rel_id = get_relation_id(rel,"evt2id.txt",use_local=use_local)
+    tgt_id = get_entity_id(tgt,"ent2id.txt",use_local=use_local)
 
     src_embedding = get_entity_embedding(src_id, transe["ent_embeddings.weight"]).mean(dim=0)
     rel_embedding = get_relation_embedding(rel_id, transe["rel_embeddings.weight"]).mean(dim=0)
@@ -123,8 +122,7 @@ def get_doc_embedding(local):
     return doc_embedding
 
 #to do
-def graph_doc_matching(query_embedding,local):
-    
+def graph_doc_matching(query_embedding:torch.tensor, use_local=True):    
     cluster_dict = get_cluster("cluster_data.json",local)
     full_doc_emb = get_doc("temporal_list_by_idx.pkl",local)
     max_cluster_score = 0
@@ -173,14 +171,29 @@ def set_query():
     #     output_table = graph_doc_matching(query_embedding)
     #     st.table(output_table)
 
-#st.session_state.document=[]
-set_query()
+
+def process_text(input_text:str)->tuple:
+
+def set_natural_query()->None:
+    input_text = st.text_input("search query here", key="source", value="")
+    src, relation, target = process_text(input_text)
+    st.session_state.document.append([src, relation, target])
+
+
+### query by triple ###
+#set_query()
+
+### query by sentence ###
+set_natural_query()
+
+
 st.subheader("Registered Query")
 #st.write([st.session_state.src, st.session_state.rel, st.session_state.tgt])
 st.write(st.session_state.document)
+
 if st.button("query"):
-    query_embedding = get_doc_embedding(local=True)
-    output_table = graph_doc_matching(query_embedding,local=True)
+    query_embedding = get_doc_embedding(use_local=True)
+    output_table = graph_doc_matching(query_embedding, use_local=True)
     url_ids = output_table["id"]
     dataset_obj = Dataset.get(dataset_project = "datasets/gdelt", dataset_name="raw_gdelt_2021")
     url2id = pd.read_csv(os.path.join(dataset_obj.get_local_copy(), "url2id.txt")).loc[1:,:]
