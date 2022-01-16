@@ -5,6 +5,8 @@ import pandas as pd
 from clearml import Task, StorageManager, Dataset
 import json, pickle
 from graph_retrieval_utils import *
+from streamlit_agraph import agraph, TripleStore, Node, Edge, Config
+
 
 st.set_page_config(layout="wide")
 st.title("Graph Retrieval Demo")
@@ -17,6 +19,9 @@ if "tgt" not in st.session_state.keys():
     st.session_state.tgt = []
 if "document" not in st.session_state.keys():
     st.session_state.document = []
+if "graph" not in st.session_state.keys():
+    st.session_state.graph = TripleStore()
+
 
 def set_source():
     st.session_state.src = st.session_state.source
@@ -58,6 +63,32 @@ def set_natural_query()->None:
         src, relation, target = process_text(input_text)
         relation = [relation]
         st.session_state.document.append([src, event_code_dict[selected_relation], target])
+
+    if st.button("submit"):
+        if st.session_state.src==[]:
+            if st.session_state.tgt==[]:
+                if st.session_state.rel==[]:
+                    st.session_state.graph.add_triple("Unknown", "Unknown", "Unknown")
+                else:
+                    st.session_state.graph.add_triple("Unknown", st.session_state.rel, "Unknown")
+            else:
+                if st.session_state.rel==[]:
+                    st.session_state.graph.add_triple("Unknown", "Unknown", st.session_state.tgt)
+                else:
+                    st.session_state.graph.add_triple("Unknown", st.session_state.rel, st.session_state.tgt)
+        else:
+            if st.session_state.tgt==[]:
+                if st.session_state.rel==[]:
+                    st.session_state.graph.add_triple(st.session_state.src, "Unknown", "Unknown")
+                else:
+                    st.session_state.graph.add_triple(st.session_state.src, st.session_state.rel, "Unknown")
+            else:
+                if st.session_state.rel==[]:
+                    st.session_state.graph.add_triple(st.session_state.src, "Unknown", st.session_state.tgt)
+                else:
+                    st.session_state.graph.add_triple(st.session_state.src, st.session_state.rel, st.session_state.tgt)
+
+        st.session_state.document.append([st.session_state.src, st.session_state.rel, st.session_state.tgt])
 
 
 question_templates={
