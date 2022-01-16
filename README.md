@@ -3,5 +3,5 @@
 
 ##RUN ME
 
-RUN "make install"
+RUN "make install" <br>
 RUN "streamlit run GraphQueryApp.py"
