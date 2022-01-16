@@ -50,12 +50,6 @@ def set_query():
     #     st.table(output_table)
 
 
-def process_text(input_text:str)->tuple:
-    if input_text in question_templates.keys():
-        return question_templates[input_text]
-    else:
-        return [], [], []
-
 def set_natural_query()->None:
     event_code_dict = {value:key for key, value in json.load(open("gdelt_event_dict.json")).items() if "18" in key}
     input_text = st.selectbox("Select a question", ["South China Sea Contest"], index=0)
@@ -65,7 +59,7 @@ def set_natural_query()->None:
     #st.write(list(event_code_dict.keys()).index("Useunconventionalviolence,notspecifiedbelow"))
 
     if st.button("submit"):
-        src, relation, target = process_text(input_text)
+        src, relation, target = process_text(input_text, question_templates)
         relation = [relation]
 
         # st.session_state.document.append([st.session_state.src, st.session_state.rel, st.session_state.tgt])
@@ -109,8 +103,6 @@ def set_natural_query()->None:
                         node={'labelProperty':'label'},
                         link={'labelProperty': 'label', 'renderLabel': True})
         agraph(list(st.session_state.graph.getNodes()), list(st.session_state.graph.getEdges()), config)
-
-
 
 question_templates={
     "South China Sea Contest":("CHINA", st.session_state.rel, []),

@@ -12,8 +12,8 @@ def get_transe(path:str,use_local=True):
     else:
         #transe_path = os.path.join(Dataset.get(dataset_project="shasha/IE-Demo",dataset_name=path).get_use_local_copy(),path)
         transe_path = StorageManager.get_local_copy("s3://experiment-logging/storage/gdelt-embeddings/openke-graph-training.3ed8b6262cd34d52b092039d0ee1d374/artifacts/transe.ckpt/transe.ckpt")
-    er_emb = torch.load(transe_path)
-    return er_emb
+    transe_matrix = torch.load(transe_path)
+    return transe_matrix
 
 def get_cluster(path:str,use_local=True):
     if use_local:
@@ -55,6 +55,7 @@ def get_relation_id(relation_text_list:list, path:str, use_local=True):
 
 def get_entity_embedding(id_list:list, embedding_matrix):
     output_list = []
+    #to refactor
     for i in id_list:
         output_list.append(embedding_matrix[i])
     if output_list==[]:
@@ -65,6 +66,7 @@ def get_entity_embedding(id_list:list, embedding_matrix):
 
 def get_relation_embedding(id_list:list, embedding_matrix):
     output_list = []
+    #to refactor
     for i in id_list:
         output_list.append(embedding_matrix[i])
     if output_list==[]:
@@ -93,6 +95,7 @@ def get_doc_embedding(use_local, document:list):
     doc_embedding = torch.cat((src_embedding.unsqueeze(0), rel_embedding.unsqueeze(0), tgt_embedding.unsqueeze(0)), dim=1)
     return doc_embedding
 
+### Function that matches a query embedding to a document vector database ###
 def graph_doc_matching(query_embedding:torch.tensor, use_local=True, use_cluster=True
 ):    
     print("Matching Embedding to DB...")
@@ -132,4 +135,11 @@ def graph_doc_matching(query_embedding:torch.tensor, use_local=True, use_cluster
     cluster_df['score'] = score_list
     cluster_df = cluster_df.sort_values(['score'],ascending=False).head(5)
     return cluster_df
+
+### Function that converts text questions to triples ###
+def process_text(input_text:str, question_templates)->tuple:
+    if input_text in question_templates.keys():
+        return question_templates[input_text]
+    else:
+        return [], [], []
 
