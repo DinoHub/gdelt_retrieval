@@ -4,6 +4,7 @@ import pandas as pd
 from clearml import Task, StorageManager, Dataset
 import json, pickle
 
+
 def get_transe(path:str,use_local=True):
     print("Loading TransE Matrix")
     if use_local:
@@ -72,8 +73,8 @@ def get_relation_embedding(id_list:list, embedding_matrix):
         output_tensor = torch.stack(output_list)
         return output_tensor
 
-def get_doc_embedding(use_local):
-    document_query=st.session_state.document
+def get_doc_embedding(use_local, document:list):
+    document_query=document
     print(document_query)
     transe=get_transe("transe.ckpt",use_local=use_local)
     src=[triple[0] for triple in document_query if triple[0]!=[]]
@@ -125,6 +126,7 @@ def graph_doc_matching(query_embedding:torch.tensor, use_local=True, use_cluster
             score_list.append(sim_score)
             id_list.append(key)
     
+    print(score_list)
     cluster_df = pd.DataFrame()
     cluster_df['id'] = id_list
     cluster_df['score'] = score_list
