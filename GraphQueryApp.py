@@ -72,11 +72,11 @@ def set_query():
     #     st.table(output_table)
 
 
-def set_natural_query()->None:
-    event_code_dict = {value:key for key, value in json.load(open("gdelt_event_dict.json")).items() if "036" in key or "18" in key}
+def set_natural_query(question_templates:dict)->None:
+    event_code_dict = {value:key for key, value in json.load(open("gdelt_event_dict.json")).items() if "010" in key or "043" in key or "051" in key or "042" in key or "190" in key}
     # event_code_dict = {value:key for key, value in json.load(open("gdelt_event_dict.json")).items()}
     # event_code_dict = {value:key for key, value in json.load(open("gdelt_event_dict.json")).items() if key in ["036","18"]}
-    input_text = st.selectbox("Select a question", ["South China Sea Contest"], index=0)
+    input_text = st.selectbox("Select a question", question_templates.keys(), index=0)
 
     selected_relation = st.selectbox("Select a theme", list(event_code_dict.keys()), index=0, key="relation", on_change=set_relation)
 
@@ -114,29 +114,33 @@ def set_natural_query()->None:
                 else:
                     st.session_state.graph.add_triple(src, relation, target)
 
-        st.subheader("Formulated Graph Query")
-        config = Config(height=200,width=800, 
-                        nodeHighlightBehavior=True,
-                        node_size=300,
-                        highlightColor="#F7A7A6", 
-                        directed=True, 
-                        collapsible=False,
-                        maxZoom=2,
-                        minZoom=0.2,
-                        initialZoom=1,
-                        node={'labelProperty':'label'},
-                        link={'labelProperty': 'label', 'renderLabel': True})
-        agraph(list(st.session_state.graph.getNodes()), list(st.session_state.graph.getEdges()), config)
+    st.subheader("Formulated Graph Query")
+    config = Config(height=200,width=800, 
+                    nodeHighlightBehavior=True,
+                    node_size=300,
+                    highlightColor="#F7A7A6", 
+                    directed=True, 
+                    collapsible=False,
+                    maxZoom=2,
+                    minZoom=0.2,
+                    initialZoom=1,
+                    node={'labelProperty':'label'},
+                    link={'labelProperty': 'label', 'renderLabel': True})
+    agraph(list(st.session_state.graph.getNodes()), list(st.session_state.graph.getEdges()), config)
 
 question_templates={
-    "South China Sea Contest":("CHINA", st.session_state.rel, []),
+    "Any China and Taiwan dispute?":("CHINA", st.session_state.rel, "TAIWAN"),
+    # "Any China and Philippines dispute?": ("CHINA", st.session_state.rel, "PHILIPPINE"),
+    "Any China and Philippines dispute?": ("PHILIPPINE", st.session_state.rel, "CHINA"),
+    "Any China and Indonesia dispute?": ("CHINA", st.session_state.rel, "INDONESIA"),
+    "Any China and Vietnam dispute": ("CHINA", st.session_state.rel, "VIETNAM"),
 }
 
 ### query by triple ###
 #set_query()
 
 ### query by sentence ###
-set_natural_query()
+set_natural_query(question_templates)
 
 #st.write(st.session_state.document)
 
@@ -148,7 +152,7 @@ if st.button("query"):
     dataset_obj = Dataset.get(dataset_project = "datasets/gdelt", dataset_name="raw_gdelt_2021")
     url2id = pd.read_csv(os.path.join(dataset_obj.get_local_copy(), "url2id.txt")).loc[1:,:]
     output_table["id"] = output_table["id"].astype("int32")
-    urls = output_table.merge(url2id, how="left", on="id").rename(columns={"value": "top 5 URLs"})#.tolist()
+    urls = output_table.merge(url2id, how="left", on="id").rename(columns={"value": "top 20 URLs"})#.tolist()
     st.table(urls)
 # st.subheader("Registered Query")
 # config = Config(height=500,width=700, 

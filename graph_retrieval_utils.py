@@ -162,7 +162,7 @@ def graph_doc_matching(query_embedding:torch.tensor,type_list:list, use_local=Tr
     cluster_df = pd.DataFrame()
     cluster_df['id'] = id_list
     cluster_df['score'] = score_list
-    cluster_df = cluster_df.sort_values(['score'],ascending=False).head(5)
+    cluster_df = cluster_df.sort_values(['score'],ascending=False).head(20)
     return cluster_df
 
 ### Function that converts text questions to triples ###
