@@ -55,22 +55,24 @@ def get_relation_id(relation_text_list:list, path:str, use_local=True):
 
 def get_entity_embedding(id_list:list, embedding_matrix):
     output_list = []
-    #to refactor
+    print(embedding_matrix.shape)
     for i in id_list:
-        output_list.append(embedding_matrix[i])
+        print(i)
+        output_list.append(embedding_matrix[int(i)])
     if output_list==[]:
-        return torch.zeros(1,200).cuda()
+        # return torch.zeros(1,200).cuda()
+        return None
     else:
         output_tensor = torch.stack(output_list)
         return output_tensor
 
 def get_relation_embedding(id_list:list, embedding_matrix):
     output_list = []
-    #to refactor
     for i in id_list:
-        output_list.append(embedding_matrix[i])
+        output_list.append(embedding_matrix[int(i)])
     if output_list==[]:
-        return torch.zeros(1,200).cuda()
+        # return torch.zeros(1,200).cuda()
+        return None
     else:
         output_tensor = torch.stack(output_list)
         return output_tensor
@@ -78,28 +80,38 @@ def get_relation_embedding(id_list:list, embedding_matrix):
 def get_doc_embedding(use_local, document:list):
     document_query=document
     print(document_query)
-    transe=get_transe("transe.ckpt",use_local=use_local)
+    transe=get_transe("transe.ckpt",use_local)
     src=[triple[0] for triple in document_query if triple[0]!=[]]
     rel=[triple[1] for triple in document_query if triple[1]!=[]]
     tgt=[triple[2] for triple in document_query if triple[2]!=[]]
 
-    src_id = get_entity_id(src,"entity2id.txt",use_local=use_local)
-    rel_id = get_relation_id(rel,"relation2id.txt",use_local=use_local)
-    tgt_id = get_entity_id(tgt,"entity2id.txt",use_local=use_local)
+    src_id = get_entity_id(src,"entity2id.txt",use_local)
+    rel_id = get_relation_id(rel,"relation2id.txt",use_local)
+    tgt_id = get_entity_id(tgt,"entity2id.txt",use_local)
 
-    print("Formulating Query Embedding...")
-    src_embedding = get_entity_embedding(src_id, transe["ent_embeddings.weight"]).mean(dim=0)
-    rel_embedding = get_relation_embedding(rel_id, transe["rel_embeddings.weight"]).mean(dim=0)
-    tgt_embedding = get_entity_embedding(tgt_id, transe["ent_embeddings.weight"]).mean(dim=0)
+    src_embedding = get_entity_embedding(src_id, transe["ent_embeddings.weight"])
+    rel_embedding = get_relation_embedding(rel_id, transe["rel_embeddings.weight"])
+    tgt_embedding = get_entity_embedding(tgt_id, transe["ent_embeddings.weight"])
 
-    doc_embedding = torch.cat((src_embedding.unsqueeze(0), rel_embedding.unsqueeze(0), tgt_embedding.unsqueeze(0)), dim=1)
-    return doc_embedding
+    emb_list = []
+    type_list = []
+    for i,emb in enumerate([src_embedding,rel_embedding,tgt_embedding]):
+        if emb==None:
+            continue
+        else:
+            emb_list.append(emb.mean(dim=0).unsqueeze(0))
+            type_list.append(i)
+
+    # doc_embedding = torch.cat((src_embedding.unsqueeze(0), rel_embedding.unsqueeze(0), tgt_embedding.unsqueeze(0)), dim=1)
+    doc_embedding = torch.cat(emb_list, dim=1)
+    return doc_embedding, type_list
 
 ### Function that matches a query embedding to a document vector database ###
-def graph_doc_matching(query_embedding:torch.tensor, use_local=True, use_cluster=True
+def graph_doc_matching(query_embedding:torch.tensor,type_list:list, use_local=True, use_cluster=True
 ):    
     print("Matching Embedding to DB...")
     full_doc_emb = get_doc("temporal_list_by_idx.pkl",use_local)
+    cluster_dict = get_cluster("cluster_data.json",use_local)
     max_cluster_score = 0
     cluster_number = ""
     
@@ -107,25 +119,42 @@ def graph_doc_matching(query_embedding:torch.tensor, use_local=True, use_cluster
     id_list = []
     
     if use_cluster:
-        cluster_dict = get_cluster("cluster_data.json",use_local)
         for cluster in cluster_dict.keys():
             if cluster!=str(-1):
                 cluster_centroid = torch.Tensor(cluster_dict[cluster]['centroid'])
-                sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),cluster_centroid.cuda().view(1,-1)).item()
+                centroid_embedding = torch.split(cluster_centroid,200,0)
+                emb_list = []
+                for index in type_list:
+                    emb_list.append(centroid_embedding[index].unsqueeze(0))
+                centroid_embedding = torch.cat(emb_list,dim=1)
+                sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),centroid_embedding.cuda().view(1,-1)).item()
                 if sim_score>=max_cluster_score:
                     cluster_number = str(cluster)
                     max_cluster_score = sim_score
             else:
-                continue        
+                continue    
 
         for doc_id in cluster_dict[cluster_number]['id_list']:
-            sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),full_doc_emb[doc_id].cuda().view(1,-1)).item()
+            doc_embedding = full_doc_emb[doc_id]
+            doc_embedding = torch.split(doc_embedding,200,0)
+            emb_list = []
+            for index in type_list:
+                emb_list.append(doc_embedding[index].unsqueeze(0))
+            doc_embedding = torch.cat(emb_list,dim=1)
+            print(doc_embedding.shape)
+            print(query_embedding.cuda().view(1,-1).shape)
+            sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),doc_embedding.cuda().view(1,-1)).item()
             score_list.append(sim_score)
-            id_list.append(doc_id)
-
+            id_list.append(doc_id)    
     else:
         for key in full_doc_emb.keys():
-            sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),full_doc_emb[key].cuda().view(1,-1)).item()
+            doc_embedding = full_doc_emb[key]
+            doc_embedding = torch.split(doc_embedding,200,0)
+            emb_list = []
+            for index in type_list:
+                emb_list.append(doc_embedding[index].unsqueeze(0))
+            doc_embedding = torch.cat(emb_list,dim=1)
+            sim_score = torch.cosine_similarity(query_embedding.cuda().view(1,-1),doc_embedding.cuda().view(1,-1)).item()
             score_list.append(sim_score)
             id_list.append(key)
     
